@@ -1,5 +1,4 @@
-use sensorflow::SerialPortListener;
-use sensorflow::BAUD_RATE;
+use sensorflow::device::serial::jeelink::{self, BAUD_RATE};
 use tokio_serial::SerialPortBuilderExt;
 
 static DEVICE: &str = "/dev/tty.usbserial-AL006PX8";
@@ -12,7 +11,7 @@ async fn main() -> tokio_serial::Result<()> {
     port.set_exclusive(false)
         .expect("Failed to set serial port to exclusive.");
 
-    let mut reader = SerialPortListener::new(port);
+    let mut reader = jeelink::new(port);
 
     while let Ok(frame) = reader.read_frame().await {
         match frame {
