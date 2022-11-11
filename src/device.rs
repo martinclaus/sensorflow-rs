@@ -1,6 +1,6 @@
 //! IO devices to read and write data from.
+use crate::error::FrameCheckError;
 use crate::Frame;
-use crate::FrameCheckError;
 use bytes::BytesMut;
 use std::marker::PhantomData;
 
@@ -88,10 +88,7 @@ pub mod serial {
     }
 
     pub mod jeelink {
-        use crate::{
-            protocol::{error::*, Frame},
-            FramedListener,
-        };
+        use crate::{error::*, Frame, FramedListener};
         use bytes::{Buf, BytesMut};
         use std::fmt::{self, Display};
 
