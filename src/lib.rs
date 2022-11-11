@@ -1,15 +1,15 @@
 extern crate anyhow;
 
-// Rexport main API
-pub use device::protocol::Frame;
-pub use device::FramedListener;
+pub mod input;
 
-pub mod device;
+// Rexport main API
+pub use input::protocol::Frame;
+pub use input::FramedListener;
 
 /// Rexports all error types
 pub mod error {
-    pub use crate::device::error::*;
-    pub use crate::device::protocol::error::*;
+    pub use crate::input::error::*;
+    pub use crate::input::protocol::error::*;
 }
 
 pub mod jeelink {
