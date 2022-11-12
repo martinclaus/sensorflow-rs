@@ -3,7 +3,7 @@
 pub use jeelink::JeeLink;
 
 pub mod jeelink {
-    use crate::{error::*, Frame, FramedListener};
+    use crate::{error::*, output::influx::LineProtocol, Frame, FramedListener};
     use bytes::{Buf, BytesMut};
     use std::fmt::{self, Display};
 
@@ -118,14 +118,28 @@ pub mod jeelink {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(
                 f,
-                "Sensor {:2}: Temperatur {:4}, Humidity {:2}, weak battery: {}, new battery: {}",
-                self.id, self.temperature, self.humidity, self.weak_battery, self.new_battery
+                "Sensor {:2}: Type {:2}, Temperatur {:4}, Humidity {:2}, weak battery: {}, new battery: {}",
+                self.id, self.sensor_type, self.temperature, self.humidity, self.weak_battery, self.new_battery
             )
+        }
+    }
+
+    impl From<JeeLinkFrame> for LineProtocol {
+        fn from(frame: JeeLinkFrame) -> Self {
+            LineProtocol::new("tempHum")
+                .add_tag("sensorId", frame.id)
+                .add_tag("sensorType", frame.sensor_type)
+                .add_value("temperature", frame.temperature as f64)
+                .add_value("humidity", frame.humidity as u64)
+                .add_value("weak_battery", frame.weak_battery)
+                .add_value("new_battery", frame.new_battery)
         }
     }
 
     #[cfg(test)]
     mod test {
+        use crate::output::influx::LineProtocol;
+
         use super::{Frame, FrameCheckError, JeeLinkFrame};
         use bytes::BytesMut;
 
@@ -168,6 +182,22 @@ pub mod jeelink {
             let mut buf = BytesMut::from(&b"45 2 5OK 9 93 954 29\r\nOK 9 25 24 63\r\n"[..]);
             let _ = JeeLinkFrame::check(&mut buf);
             assert_eq!(buf, &b"OK 9 25 24 63\r\n"[..]);
+        }
+
+        #[test]
+        fn test_frame_correctly_translated_to_lineprotocol() {
+            let frame = JeeLinkFrame {
+                id: 50,
+                sensor_type: 1,
+                new_battery: false,
+                weak_battery: false,
+                temperature: 21.5,
+                humidity: 65,
+            };
+            assert_eq!(
+                format!("{}", LineProtocol::from(frame)),
+                "tempHum,sensorId=50,sensorType=1 temperature=21.5,humidity=65u,weak_battery=false,new_battery=false"
+            );
         }
     }
 }

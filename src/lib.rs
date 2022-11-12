@@ -2,6 +2,7 @@ extern crate anyhow;
 
 pub mod devices;
 pub mod input;
+pub mod output;
 
 // Rexport main API
 pub use input::protocol::Frame;
