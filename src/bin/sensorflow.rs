@@ -33,7 +33,7 @@ enum OutEnum {
 }
 
 #[tokio::main]
-async fn main() -> tokio_serial::Result<()> {
+async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     let mut port = tokio_serial::new(cli.device, JeeLink::get_baud_rate()).open_native_async()?;
@@ -46,17 +46,17 @@ async fn main() -> tokio_serial::Result<()> {
         ProtoEnum::Jeelink => JeeLink::new(port),
     };
 
-    while let Ok(frame) = reader.read_frame().await {
-        match frame {
-            Some(frame) => match cli.output {
+    loop {
+        let res = reader.read_frame().await;
+        match res {
+            Ok(Some(frame)) => match cli.output {
                 OutEnum::Stringify => println!("{frame}"),
                 OutEnum::Influxdb => println!("{}", LineProtocol::from(frame)),
             },
-            None => (),
+            Ok(_) => (),
+            Err(e) => Err(e)?,
         }
     }
-
-    return Ok(());
 }
 
 #[test]
