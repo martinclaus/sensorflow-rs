@@ -1,6 +1,10 @@
 use clap::{Parser, ValueEnum};
-use sensorflow::{devices::JeeLink, output::influx::LineProtocol};
-use tokio_serial::SerialPortBuilderExt;
+use sensorflow::{
+    devices::{self, jeelink::JeeLinkFrame},
+    output::influx::LineProtocol,
+    FramedListener,
+};
+use tokio_serial::SerialStream;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about=None)]
@@ -34,28 +38,37 @@ enum OutEnum {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
+    let Cli {
+        device,
+        input,
+        output,
+    } = Cli::parse();
 
-    let mut port = tokio_serial::new(cli.device, JeeLink::get_baud_rate()).open_native_async()?;
-
-    #[cfg(unix)]
-    port.set_exclusive(false)
-        .expect("Failed to set serial port to exclusive.");
-
-    let mut reader = match cli.input {
-        ProtoEnum::Jeelink => JeeLink::new(port),
-    };
+    let mut reader = make_reader(input, device)?;
 
     loop {
         let res = reader.read_frame().await;
         match res {
-            Ok(Some(frame)) => match cli.output {
-                OutEnum::Stringify => println!("{frame}"),
-                OutEnum::Influxdb => println!("{}", LineProtocol::from(frame)),
-            },
+            Ok(Some(frame)) => println!("{}", to_output(output, frame)),
             Ok(_) => (),
             Err(e) => Err(e)?,
         }
+    }
+}
+
+fn make_reader(
+    input: ProtoEnum,
+    path: String,
+) -> anyhow::Result<FramedListener<SerialStream, JeeLinkFrame>> {
+    match input {
+        ProtoEnum::Jeelink => devices::jeelink::new(path),
+    }
+}
+
+fn to_output(output: OutEnum, frame: JeeLinkFrame) -> String {
+    match output {
+        OutEnum::Stringify => frame.to_string(),
+        OutEnum::Influxdb => LineProtocol::from(frame).to_string(),
     }
 }
 

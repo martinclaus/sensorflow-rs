@@ -1,20 +1,20 @@
 use crate::{error::*, output::influx::LineProtocol, Frame, FramedListener};
 use bytes::{Buf, BytesMut};
 use std::fmt::{self, Display};
+use tokio_serial::{SerialPortBuilderExt, SerialStream};
 
 /// Baud rate of the device. For the JeeLink it is 57.6 KBd
 const BAUD_RATE: u32 = 57600;
 
-pub struct JeeLink;
+pub fn new<'a>(
+    path: impl Into<std::borrow::Cow<'a, str>>,
+) -> anyhow::Result<FramedListener<SerialStream, JeeLinkFrame>> {
+    let mut port = tokio_serial::new(path, BAUD_RATE).open_native_async()?;
 
-impl JeeLink {
-    pub fn new<P>(port: P) -> FramedListener<P, JeeLinkFrame> {
-        FramedListener::<P, JeeLinkFrame>::new(port)
-    }
+    #[cfg(unix)]
+    port.set_exclusive(false)?;
 
-    pub const fn get_baud_rate() -> u32 {
-        BAUD_RATE
-    }
+    Ok(FramedListener::<_, JeeLinkFrame>::new(port))
 }
 
 /// Data Frame received from JeeLink device
