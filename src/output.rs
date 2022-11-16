@@ -3,7 +3,25 @@
 pub trait ToOutput: ToString + influx::ToLineProtocol {}
 
 pub mod influx {
+    use chrono::{DateTime, Utc};
     use std::fmt;
+
+    struct LineProtocolTime(Option<DateTime<Utc>>);
+
+    impl fmt::Display for LineProtocolTime {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                LineProtocolTime(Some(time)) => write!(f, " {}", time.timestamp_nanos()),
+                _ => Ok(()),
+            }
+        }
+    }
+
+    impl From<Option<DateTime<Utc>>> for LineProtocolTime {
+        fn from(t: Option<DateTime<Utc>>) -> Self {
+            LineProtocolTime(t)
+        }
+    }
 
     pub enum LineProtocolValue {
         Float(f64),
@@ -73,6 +91,7 @@ pub mod influx {
         measurement: String,
         tags: Vec<Item>,
         values: Vec<Item>,
+        time: LineProtocolTime,
     }
 
     impl LineProtocol {
@@ -81,6 +100,7 @@ pub mod influx {
                 measurement: measurement.into(),
                 tags: vec![],
                 values: vec![],
+                time: None.into(),
             };
         }
 
@@ -99,6 +119,11 @@ pub mod influx {
             self.values.push(Item(name.into(), value.into()));
             self
         }
+
+        pub fn add_time(mut self, time: Option<DateTime<Utc>>) -> LineProtocol {
+            self.time = time.into();
+            self
+        }
     }
 
     impl fmt::Display for LineProtocol {
@@ -112,12 +137,19 @@ pub mod influx {
                 .map(|item| format!("{}", item))
                 .collect::<Vec<_>>()
                 .join(",");
-            write!(f, "{}{} {}", self.measurement, tag_string, value_string)
+            write!(
+                f,
+                "{}{} {}{}",
+                self.measurement, tag_string, value_string, self.time
+            )
         }
     }
 
     #[cfg(test)]
     mod test {
+
+        use chrono::{DateTime, NaiveDate, Utc};
+
         use super::LineProtocol;
 
         #[test]
@@ -146,6 +178,25 @@ pub mod influx {
                         .add_tag("tag2", "something")
                 ),
                 "measurement1,tag1=1,tag2=something "
+            );
+
+            let date = DateTime::<Utc>::from_utc(
+                NaiveDate::from_ymd_opt(2016, 7, 8)
+                    .expect("should work")
+                    .and_hms_nano_opt(9, 10, 11, 1)
+                    .expect("Should work"),
+                Utc,
+            );
+
+            assert_eq!(
+                format!(
+                    "{}",
+                    LineProtocol::new("measurement1")
+                        .add_tag("tag1", "1")
+                        .add_value("keyI64", 1i64)
+                        .add_time(Some(date))
+                ),
+                "measurement1,tag1=1 keyI64=1i 1467969011000000001"
             );
         }
     }

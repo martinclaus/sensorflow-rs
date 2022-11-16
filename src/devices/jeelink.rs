@@ -6,6 +6,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use bytes::{Buf, BytesMut};
+use chrono::Utc;
 use std::fmt::{self, Display};
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
 
@@ -155,6 +156,7 @@ impl ToLineProtocol for JeeLinkFrame {
             .add_value("humidity", self.humidity as u64)
             .add_value("weak_battery", self.weak_battery)
             .add_value("new_battery", self.new_battery)
+            .add_time(Some(Utc::now()))
     }
 }
 

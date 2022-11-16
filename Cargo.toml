@@ -16,3 +16,4 @@ serialport = "4.2.0"
 thiserror = "1.0.37"
 clap = { version = "4.0.23", features = ["derive"] }
 async-trait = "0.1.58"
+chrono = "0.4.23"
