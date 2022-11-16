@@ -1,5 +1,7 @@
 //! Adapter for data output
 
+pub trait ToOutput: ToString + influx::ToLineProtocol {}
+
 pub mod influx {
     use std::fmt;
 
@@ -61,6 +63,10 @@ pub mod influx {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             write!(f, "{}={}", self.0, self.1)
         }
+    }
+
+    pub trait ToLineProtocol {
+        fn to_lineprotocol(&self) -> LineProtocol;
     }
 
     pub struct LineProtocol {

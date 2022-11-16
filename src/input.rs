@@ -41,8 +41,10 @@ pub mod protocol {
 
     use bytes::BytesMut;
 
+    use crate::output::ToOutput;
+
     /// Trait for protocol frame objects.
-    pub trait Frame: Sized {
+    pub trait Frame: Sized + ToOutput {
         /// Check if a full frame is available in the buffer and returns it if possible.
         ///
         /// The input buffer will be advanced until a start sequence of a frame is reached.

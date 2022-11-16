@@ -1,10 +1,8 @@
 use clap::{Parser, ValueEnum};
 use sensorflow::{
-    devices::{self, jeelink::JeeLinkFrame},
-    output::influx::LineProtocol,
-    FramedListener,
+    devices::{self, Device},
+    output::ToOutput,
 };
-use tokio_serial::SerialStream;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about=None)]
@@ -56,19 +54,19 @@ async fn main() -> anyhow::Result<()> {
     }
 }
 
-fn make_reader(
-    input: ProtoEnum,
-    path: String,
-) -> anyhow::Result<FramedListener<SerialStream, JeeLinkFrame>> {
+fn make_reader(input: ProtoEnum, path: String) -> anyhow::Result<Box<dyn Device>> {
     match input {
-        ProtoEnum::Jeelink => devices::jeelink::new(path),
+        ProtoEnum::Jeelink => match devices::JeeLink::new(path) {
+            Ok(device) => Ok(Box::new(device)),
+            Err(e) => Err(e),
+        },
     }
 }
 
-fn to_output(output: OutEnum, frame: JeeLinkFrame) -> String {
+fn to_output(output: OutEnum, frame: Box<dyn ToOutput>) -> String {
     match output {
         OutEnum::Stringify => frame.to_string(),
-        OutEnum::Influxdb => LineProtocol::from(frame).to_string(),
+        OutEnum::Influxdb => frame.to_lineprotocol().to_string(),
     }
 }
 

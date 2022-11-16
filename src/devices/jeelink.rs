@@ -1,22 +1,46 @@
-use crate::{error::*, output::influx::LineProtocol, Frame, FramedListener};
+use crate::{
+    error::*,
+    output::influx::{LineProtocol, ToLineProtocol},
+    output::ToOutput,
+    Frame, FramedListener,
+};
+use async_trait::async_trait;
 use bytes::{Buf, BytesMut};
 use std::fmt::{self, Display};
 use tokio_serial::{SerialPortBuilderExt, SerialStream};
 
+use super::Device;
+
 /// Baud rate of the device. For the JeeLink it is 57.6 KBd
 const BAUD_RATE: u32 = 57600;
 
-pub fn new<'a>(
-    path: impl Into<std::borrow::Cow<'a, str>>,
-) -> anyhow::Result<FramedListener<SerialStream, JeeLinkFrame>> {
-    let mut port = tokio_serial::new(path, BAUD_RATE).open_native_async()?;
-
-    #[cfg(unix)]
-    port.set_exclusive(false)?;
-
-    Ok(FramedListener::<_, JeeLinkFrame>::new(port))
+pub struct JeeLink {
+    reader: FramedListener<SerialStream, JeeLinkFrame>,
 }
 
+#[async_trait]
+impl Device for JeeLink {
+    async fn read_frame(&mut self) -> anyhow::Result<Option<Box<dyn ToOutput>>> {
+        match self.reader.read_frame().await {
+            Ok(Some(frame)) => Ok(Some(Box::new(frame))),
+            Ok(None) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+impl JeeLink {
+    pub fn new<'a>(path: impl Into<std::borrow::Cow<'a, str>>) -> anyhow::Result<Self> {
+        let mut port = tokio_serial::new(path, BAUD_RATE).open_native_async()?;
+
+        #[cfg(unix)]
+        port.set_exclusive(false)?;
+
+        Ok(JeeLink {
+            reader: FramedListener::new(port),
+        })
+    }
+}
 /// Data Frame received from JeeLink device
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct JeeLinkFrame {
@@ -26,6 +50,22 @@ pub struct JeeLinkFrame {
     weak_battery: bool,
     temperature: f32,
     humidity: u8,
+}
+
+impl JeeLinkFrame {
+    /// Validate string to be parsable as a Frame object.
+    fn validate(s: &str) -> Result<(), FrameValidation> {
+        if !s
+            .chars()
+            .all(|c| c.is_numeric() || c.is_whitespace() || c.is_ascii_control() || c.is_control())
+        {
+            return Err(FrameValidation::InvalidChars(s.to_string()));
+        }
+        if s.chars().filter(|c| c.is_whitespace()).count() != 4 {
+            return Err(FrameValidation::WrongNumberOfFields(s.to_string()));
+        }
+        Ok(())
+    }
 }
 
 impl Frame for JeeLinkFrame {
@@ -94,21 +134,7 @@ impl Frame for JeeLinkFrame {
     }
 }
 
-impl JeeLinkFrame {
-    /// Validate string to be parsable as a Frame object.
-    fn validate(s: &str) -> Result<(), FrameValidation> {
-        if !s
-            .chars()
-            .all(|c| c.is_numeric() || c.is_whitespace() || c.is_ascii_control() || c.is_control())
-        {
-            return Err(FrameValidation::InvalidChars(s.to_string()));
-        }
-        if s.chars().filter(|c| c.is_whitespace()).count() != 4 {
-            return Err(FrameValidation::WrongNumberOfFields(s.to_string()));
-        }
-        Ok(())
-    }
-}
+impl ToOutput for JeeLinkFrame {}
 
 impl Display for JeeLinkFrame {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -120,21 +146,21 @@ impl Display for JeeLinkFrame {
     }
 }
 
-impl From<JeeLinkFrame> for LineProtocol {
-    fn from(frame: JeeLinkFrame) -> Self {
+impl ToLineProtocol for JeeLinkFrame {
+    fn to_lineprotocol(&self) -> LineProtocol {
         LineProtocol::new("tempHum")
-            .add_tag("sensorId", frame.id)
-            .add_tag("sensorType", frame.sensor_type)
-            .add_value("temperature", frame.temperature as f64)
-            .add_value("humidity", frame.humidity as u64)
-            .add_value("weak_battery", frame.weak_battery)
-            .add_value("new_battery", frame.new_battery)
+            .add_tag("sensorId", self.id)
+            .add_tag("sensorType", self.sensor_type)
+            .add_value("temperature", self.temperature as f64)
+            .add_value("humidity", self.humidity as u64)
+            .add_value("weak_battery", self.weak_battery)
+            .add_value("new_battery", self.new_battery)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::output::influx::LineProtocol;
+    use crate::output::influx::ToLineProtocol;
 
     use super::{Frame, FrameCheckError, JeeLinkFrame};
     use bytes::BytesMut;
@@ -191,7 +217,7 @@ mod test {
             humidity: 65,
         };
         assert_eq!(
-                format!("{}", LineProtocol::from(frame)),
+                format!("{}", frame.to_lineprotocol()),
                 "tempHum,sensorId=50,sensorType=1 temperature=21.5,humidity=65u,weak_battery=false,new_battery=false"
             );
     }
